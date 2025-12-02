@@ -1,0 +1,194 @@
+{
+  "api_info": {
+    "endpoint": "https://api.apify.com/v2/acts/apify~instagram-scraper/run-sync-get-dataset-items",
+    "method": "POST",
+    "test_profile": "https://www.instagram.com/ivyirelandx/",
+    "posts_returned": 24,
+    "description": "Returns posts where the user is tagged, owner, or co-author"
+  },
+  "post_structure": {
+    "id": "string - Unique post ID (e.g., '3770896338825362350')",
+    "type": "string - Post type: 'Image', 'Video', 'Sidecar' (carousel)",
+    "shortCode": "string - Short code for the post URL",
+    "caption": "string - Post caption text",
+    "hashtags": "array - List of hashtags used",
+    "mentions": "array - List of mentioned users",
+    "url": "string - Full Instagram post URL",
+    "commentsCount": "number - Total comments count",
+    "firstComment": "string - Text of first comment",
+    "likesCount": "number - Total likes count",
+    "timestamp": "string - ISO 8601 timestamp (e.g., '2025-11-21T17:24:55.000Z')",
+    "dimensionsHeight": "number - Image/video height in pixels",
+    "dimensionsWidth": "number - Image/video width in pixels",
+    "displayUrl": "string - Main display image URL",
+    "images": "array - Additional image URLs for carousels",
+    "alt": "string - Alt text description",
+    "isCommentsDisabled": "boolean - Whether comments are disabled",
+    "isSponsored": "boolean - Whether post is sponsored",
+    "inputUrl": "string - Original input URL provided to scraper",
+    "ownerUsername": "string - Post owner's username",
+    "ownerId": "string - Post owner's Instagram ID",
+    "ownerFullName": "string - Post owner's full name",
+    "childPosts": "array - Child posts for carousels",
+    "latestComments": {
+      "_description": "array - Recent comments on the post",
+      "structure": {
+        "id": "string - Comment ID",
+        "text": "string - Comment text",
+        "ownerUsername": "string - Commenter's username",
+        "ownerProfilePicUrl": "string - Commenter's profile picture URL",
+        "timestamp": "string - ISO 8601 timestamp",
+        "repliesCount": "number - Number of replies",
+        "replies": "array - Nested replies",
+        "likesCount": "number - Comment likes count",
+        "owner": {
+          "id": "string - Commenter's Instagram ID",
+          "is_verified": "boolean - Verification status",
+          "profile_pic_url": "string - Profile picture URL",
+          "username": "string - Username"
+        }
+      }
+    },
+    "taggedUsers": {
+      "_description": "array - Users tagged in the post",
+      "structure": {
+        "full_name": "string - User's full name",
+        "id": "string - Instagram user ID",
+        "is_verified": "boolean - Verification status",
+        "profile_pic_url": "string - Profile picture URL",
+        "username": "string - Username"
+      }
+    },
+    "coauthorProducers": {
+      "_description": "array - Co-authors/collaborators on the post",
+      "structure": {
+        "id": "string - Instagram user ID",
+        "is_verified": "boolean - Verification status",
+        "profile_pic_url": "string - Profile picture URL",
+        "username": "string - Username"
+      }
+    }
+  },
+  "database_schema_suggestions": {
+    "profiles": {
+      "description": "Store Instagram user/profile information",
+      "fields": {
+        "id": "PRIMARY KEY - Instagram user ID",
+        "username": "UNIQUE - Instagram username",
+        "full_name": "User's display name",
+        "is_verified": "Boolean - verification badge",
+        "profile_pic_url": "Profile picture URL",
+        "scraped_at": "Timestamp of when data was fetched",
+        "created_at": "Database record creation time",
+        "updated_at": "Last update time"
+      }
+    },
+    "posts": {
+      "description": "Store Instagram posts",
+      "fields": {
+        "id": "PRIMARY KEY - Instagram post ID",
+        "short_code": "Short code for URL",
+        "type": "Post type (Image/Video/Sidecar)",
+        "caption": "TEXT - Post caption",
+        "url": "Post URL",
+        "display_url": "Main image/video URL",
+        "dimensions_height": "Media height",
+        "dimensions_width": "Media width",
+        "likes_count": "Number of likes",
+        "comments_count": "Number of comments",
+        "is_comments_disabled": "Boolean",
+        "is_sponsored": "Boolean",
+        "alt_text": "Alt text description",
+        "timestamp": "When post was created on Instagram",
+        "owner_id": "FOREIGN KEY -> profiles(id)",
+        "scraped_at": "When data was fetched",
+        "created_at": "Database record creation",
+        "updated_at": "Last update"
+      },
+      "indexes": ["owner_id", "timestamp", "short_code"]
+    },
+    "post_images": {
+      "description": "Store multiple images for carousel posts",
+      "fields": {
+        "id": "PRIMARY KEY - Auto increment",
+        "post_id": "FOREIGN KEY -> posts(id)",
+        "image_url": "Image URL",
+        "position": "Image order in carousel",
+        "created_at": "Database record creation"
+      }
+    },
+    "comments": {
+      "description": "Store post comments",
+      "fields": {
+        "id": "PRIMARY KEY - Instagram comment ID",
+        "post_id": "FOREIGN KEY -> posts(id)",
+        "owner_id": "FOREIGN KEY -> profiles(id)",
+        "text": "TEXT - Comment text",
+        "likes_count": "Number of likes",
+        "replies_count": "Number of replies",
+        "timestamp": "Comment creation time",
+        "parent_comment_id": "FOREIGN KEY -> comments(id) - For nested replies",
+        "scraped_at": "When data was fetched",
+        "created_at": "Database record creation"
+      },
+      "indexes": ["post_id", "owner_id", "parent_comment_id", "timestamp"]
+    },
+    "hashtags": {
+      "description": "Store unique hashtags",
+      "fields": {
+        "id": "PRIMARY KEY - Auto increment",
+        "tag": "UNIQUE - Hashtag text without #",
+        "created_at": "First seen"
+      }
+    },
+    "post_hashtags": {
+      "description": "Many-to-many relationship between posts and hashtags",
+      "fields": {
+        "post_id": "FOREIGN KEY -> posts(id)",
+        "hashtag_id": "FOREIGN KEY -> hashtags(id)",
+        "PRIMARY KEY": "(post_id, hashtag_id)"
+      }
+    },
+    "mentions": {
+      "description": "Track user mentions in captions",
+      "fields": {
+        "id": "PRIMARY KEY - Auto increment",
+        "post_id": "FOREIGN KEY -> posts(id)",
+        "mentioned_user_id": "FOREIGN KEY -> profiles(id)",
+        "created_at": "Database record creation"
+      }
+    },
+    "tagged_users": {
+      "description": "Users tagged in posts (photo tags)",
+      "fields": {
+        "id": "PRIMARY KEY - Auto increment",
+        "post_id": "FOREIGN KEY -> posts(id)",
+        "tagged_user_id": "FOREIGN KEY -> profiles(id)",
+        "created_at": "Database record creation"
+      }
+    },
+    "coauthors": {
+      "description": "Co-authors/collaborators on posts",
+      "fields": {
+        "id": "PRIMARY KEY - Auto increment",
+        "post_id": "FOREIGN KEY -> posts(id)",
+        "coauthor_user_id": "FOREIGN KEY -> profiles(id)",
+        "created_at": "Database record creation"
+      }
+    }
+  },
+  "notes": [
+    "The API returns posts where the profile is involved (owner, tagged, or coauthor)",
+    "Comments include nested replies - consider recursive relationships",
+    "All timestamps are in ISO 8601 format (UTC)",
+    "Profile picture URLs are temporary - consider downloading and storing locally",
+    "Image URLs are CDN links - may expire, consider downloading important images",
+    "The scraper fetches posts, not just profile metadata",
+    "For a complete profile scrape, you may need additional API parameters",
+    "Consider rate limiting and pagination for large datasets",
+    "Store scraped_at timestamps to track data freshness"
+  ],
+  "sample_api_input": {
+    "directUrls": ["https://www.instagram.com/ivyirelandx/"]
+  }
+}

@@ -1,0 +1,80 @@
+[
+  {
+    "post_id": "3725184410607233736",
+    "original_caption": "I got my hair done girlfriend",
+    "persona_variants": [
+      {
+        "persona": "A1",
+        "background_change": "Change the background to a cityscape with skyscrapers visible through the car window.",
+        "outfit_change": "Change the outfit to a strapless royal blue dress.",
+        "why": "The cityscape background adds a sophisticated urban vibe, while the royal blue dress complements the new setting by adding a touch of elegance.",
+        "caption_options": [
+          "New hair, new city vibes! \ud83d\udc99",
+          "Feeling blue-tiful with my new hair in the city! \u2728",
+          "City lights and fresh highlights! \ud83c\udf06\ud83d\udc87\u200d\u2640\ufe0f"
+        ]
+      },
+      {
+        "persona": "A2",
+        "background_change": "Change the background to a beach view with the ocean visible through the car window.",
+        "outfit_change": "Change the outfit to a strapless light pink sundress.",
+        "why": "The beach setting provides a relaxed, vacation-like atmosphere, and the light pink sundress enhances the summery feel.",
+        "caption_options": [
+          "Beach day with my new hair! \ud83c\udf0a\ud83d\udc96",
+          "Sun, sand, and fresh strands! \ud83c\udfd6\ufe0f",
+          "New hair, beach vibes! \ud83c\udf34\ud83d\udc87\u200d\u2640\ufe0f"
+        ]
+      },
+      {
+        "persona": "B",
+        "background_change": "Change the background to a park with greenery visible through the car window.",
+        "outfit_change": "Change the outfit to a strapless forest green dress.",
+        "why": "The park setting offers a natural, serene environment, and the forest green dress blends well with the greenery, creating a harmonious look.",
+        "caption_options": [
+          "Fresh hair, fresh air! \ud83c\udf3f",
+          "Green vibes with my new do! \ud83c\udf33\ud83d\udc9a",
+          "Nature and new hair, perfect combo! \ud83c\udf43\ud83d\udc87\u200d\u2640\ufe0f"
+        ]
+      }
+    ]
+  },
+  {
+    "post_id": "3728072016768607515",
+    "original_caption": "\u2764\ufe0f",
+    "persona_variants": [
+      {
+        "persona": "A1",
+        "background_change": "Change the background to a tropical beach setting with palm trees in the distance.",
+        "outfit_change": "Change the bikini to a solid dark blue color.",
+        "why": "The tropical beach setting adds a vacation vibe, while the dark blue bikini provides a contrast to the original bright colors, making it feel fresh yet familiar.",
+        "caption_options": [
+          "Beach day vibes \ud83c\udf34",
+          "Feeling the ocean breeze \ud83c\udf0a",
+          "Blue skies and blue bikinis \ud83d\udc99"
+        ]
+      },
+      {
+        "persona": "A2",
+        "background_change": "Change the background to a modern indoor setting with a minimalist white interior and large windows.",
+        "outfit_change": "Change the bikini to a pastel pink color with subtle floral patterns.",
+        "why": "The modern indoor setting gives a sophisticated feel, and the pastel pink bikini with floral patterns adds a touch of elegance and femininity.",
+        "caption_options": [
+          "Chic and serene indoors \ud83e\udeb4",
+          "Floral vibes in the city \ud83c\udf38",
+          "Soft and stylish at home \ud83d\udc96"
+        ]
+      },
+      {
+        "persona": "B",
+        "background_change": "Change the background to a rustic outdoor setting with wooden elements and greenery.",
+        "outfit_change": "Change the bikini to a earthy green color with a simple leaf design.",
+        "why": "The rustic outdoor setting provides a natural, earthy vibe, and the green bikini with leaf design complements the environment, creating a harmonious look.",
+        "caption_options": [
+          "Nature's embrace \ud83c\udf3f",
+          "Green and serene \ud83c\udf43",
+          "Rustic charm and leafy dreams \ud83c\udf42"
+        ]
+      }
+    ]
+  }
+]
