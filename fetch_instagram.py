@@ -147,8 +147,8 @@ def fetch_instagram_profile(username):
         return None
 
 if __name__ == "__main__":
-    # Fetch data for ivyirelandx
-    username = "ivyirelandx"
+    # Fetch data for madison.moorgan
+    username = "madison.moorgan"
     result = fetch_instagram_profile(username)
 
     if result:

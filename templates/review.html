@@ -1,0 +1,261 @@
+{% extends "base.html" %}
+
+{% block title %}Review Edit - Instagram Editor{% endblock %}
+
+{% block extra_css %}
+<style>
+    .back-link {
+        color: #0095f6;
+        text-decoration: none;
+        font-size: 14px;
+        margin-bottom: 20px;
+        display: inline-block;
+    }
+
+    .back-link:hover {
+        text-decoration: underline;
+    }
+
+    .review-container {
+        max-width: 1200px;
+        margin: 0 auto;
+    }
+
+    .comparison-section {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+        margin-bottom: 30px;
+    }
+
+    .image-box {
+        background: white;
+        border: 1px solid #dbdbdb;
+        border-radius: 8px;
+        overflow: hidden;
+    }
+
+    .image-box img {
+        width: 100%;
+        height: 500px;
+        object-fit: contain;
+        background: #f0f0f0;
+    }
+
+    .image-label {
+        padding: 15px;
+        font-weight: 600;
+        font-size: 14px;
+        border-top: 1px solid #dbdbdb;
+    }
+
+    .prompt-section {
+        background: white;
+        border: 1px solid #dbdbdb;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+    }
+
+    .prompt-label {
+        font-weight: 600;
+        font-size: 14px;
+        margin-bottom: 8px;
+    }
+
+    .prompt-text {
+        font-size: 14px;
+        line-height: 1.5;
+        color: #262626;
+    }
+
+    .actions-section {
+        background: white;
+        border: 1px solid #dbdbdb;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+    }
+
+    .actions-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 15px;
+    }
+
+    .action-btn {
+        width: 100%;
+        padding: 15px;
+        font-size: 16px;
+    }
+
+    .batch-preview {
+        background: white;
+        border: 1px solid #dbdbdb;
+        border-radius: 8px;
+        padding: 20px;
+    }
+
+    .batch-preview h4 {
+        margin-bottom: 15px;
+    }
+
+    .batch-images {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+        gap: 10px;
+    }
+
+    .batch-thumbnail {
+        width: 100%;
+        height: 100px;
+        object-fit: cover;
+        border-radius: 4px;
+        border: 1px solid #dbdbdb;
+    }
+
+    .success-message {
+        background: #d4edda;
+        color: #155724;
+        padding: 15px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        font-size: 14px;
+    }
+
+    .error-message {
+        background: #f8d7da;
+        color: #721c24;
+        padding: 15px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        font-size: 14px;
+    }
+
+    @media (max-width: 768px) {
+        .comparison-section {
+            grid-template-columns: 1fr;
+        }
+
+        .actions-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<a href="/carousel/{{ carousel.id }}" class="back-link">← Back to carousel</a>
+
+<div class="review-container">
+    <h2 style="margin-bottom: 20px;">Review Edit Results</h2>
+
+    <div id="messageContainer"></div>
+
+    <div class="prompt-section">
+        <div class="prompt-label">Edit Prompt:</div>
+        <div class="prompt-text">{{ test.edit_prompt }}</div>
+    </div>
+
+    <div class="comparison-section">
+        <div class="image-box">
+            <img src="{{ image.local_path or image.image_url }}" alt="Original">
+            <div class="image-label">Original Image</div>
+        </div>
+
+        <div class="image-box">
+            <img src="{{ test.nanabana_result_url }}" alt="Edited">
+            <div class="image-label">NanaBanana Edit</div>
+        </div>
+    </div>
+
+    {% if test.status != 'approved' and test.status != 'rejected' %}
+    <div class="actions-section">
+        <h3 style="margin-bottom: 15px;">What do you want to do?</h3>
+
+        <div class="actions-grid">
+            <button class="btn btn-success action-btn" onclick="approveEdit()">
+                ✓ Approve & Send to ComfyUI
+            </button>
+
+            <button class="btn btn-danger action-btn" onclick="rejectEdit()">
+                ✗ Reject & Try Again
+            </button>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if other_images %}
+    <div class="batch-preview">
+        <h4>After approval, these {{ other_images|length }} images will be processed with ComfyUI:</h4>
+        <div class="batch-images">
+            {% for img in other_images %}
+            <img src="{{ img.local_path or img.image_url }}" alt="Image {{ img.image_order }}" class="batch-thumbnail">
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function showMessage(message, type) {
+    const container = document.getElementById('messageContainer');
+    const className = type === 'success' ? 'success-message' : 'error-message';
+    container.innerHTML = `<div class="${className}">${message}</div>`;
+}
+
+function approveEdit() {
+    if (!confirm('Approve this edit? The remaining images will be queued for ComfyUI batch processing.')) {
+        return;
+    }
+
+    fetch('/api/approve_edit/{{ test.id }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({})
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showMessage(data.message, 'success');
+            setTimeout(() => {
+                window.location.href = '/batches';
+            }, 2000);
+        } else {
+            showMessage('Error: ' + data.message, 'error');
+        }
+    })
+    .catch(error => {
+        showMessage('Error: ' + error.message, 'error');
+    });
+}
+
+function rejectEdit() {
+    const notes = prompt('Why are you rejecting this edit? (optional)');
+
+    fetch('/api/reject_edit/{{ test.id }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            notes: notes || ''
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showMessage('Edit rejected. Redirecting...', 'error');
+            setTimeout(() => {
+                window.location.href = '/carousel/{{ carousel.id }}';
+            }, 2000);
+        }
+    })
+    .catch(error => {
+        showMessage('Error: ' + error.message, 'error');
+    });
+}
+</script>
+{% endblock %}
