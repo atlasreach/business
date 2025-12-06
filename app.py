@@ -387,22 +387,23 @@ def approve_edit(test_id):
                 print(f"  ❌ Pose {idx + 1} timed out or failed")
                 continue
 
-            print(f"  ✅ Pose {idx + 1} complete! Output: {output_filename}")
+            print(f"  ✅ Pose {idx + 1} complete!")
 
-            # Download result image from RunPod
+            # Download result image from RunPod via HTTP API
             try:
-                output_path = f"/workspace/ComfyUI/output/{output_filename}"
-                local_result_path = f"/tmp/result_{batch_id}_pose{idx + 1}.png"
+                # Construct the actual saved filename (not the temp one from history)
+                actual_filename = f"{batch_id}_pose{idx + 1}_00001_.png"
 
-                subprocess.run([
-                    'scp', '-P', RUNPOD_SSH_PORT, '-i', SSH_KEY_PATH,
-                    f'root@{RUNPOD_SSH_HOST}:{output_path}', local_result_path
-                ], check=True, timeout=60)
+                # Download via HTTP /api/view endpoint
+                download_url = f"{COMFYUI_API_URL}/api/view?filename={actual_filename}&type=output&subfolder="
+                print(f"  📥 Downloading: {download_url}")
+
+                download_response = requests.get(download_url, timeout=60)
+                download_response.raise_for_status()
+
+                file_data = download_response.content
 
                 # Upload to Supabase Storage
-                with open(local_result_path, 'rb') as f:
-                    file_data = f.read()
-
                 storage_path = f"pose_transfers/{batch_id}_pose{idx + 1}.png"
                 supabase.storage.from_('carousel-images').upload(
                     storage_path,
@@ -414,13 +415,12 @@ def approve_edit(test_id):
                 public_url = supabase.storage.from_('carousel-images').get_public_url(storage_path)
                 completed_images.append(public_url)
 
-                # Clean up local file
-                os.unlink(local_result_path)
-
-                print(f"  ✅ Uploaded to Supabase: {storage_path}")
+                print(f"  ✅ Downloaded and uploaded to Supabase: {storage_path}")
 
             except Exception as download_error:
                 print(f"  ❌ Download/upload error for pose {idx + 1}: {download_error}")
+                import traceback
+                traceback.print_exc()
                 continue
 
         # 7. Update batch with completed results
