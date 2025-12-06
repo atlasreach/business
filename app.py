@@ -354,6 +354,8 @@ def approve_edit(test_id):
 
     except Exception as e:
         print(f"❌ Batch processing error: {e}")
+        import traceback
+        traceback.print_exc()
 
         # Update batch with error
         supabase.table('comfyui_batches').update({
@@ -399,9 +401,14 @@ def poll_batch(batch_id):
     if not batch or batch['status'] != 'processing':
         return jsonify(batch)
 
-    prompt_ids = batch.get('comfyui_prompt_ids', [])
+    prompt_ids = batch.get('comfyui_prompt_ids') or []
     if not prompt_ids:
-        return jsonify(batch)
+        # Old batch without prompt_ids - mark as completed
+        supabase.table('comfyui_batches').update({
+            'status': 'completed',
+            'completed_at': datetime.now().isoformat()
+        }).eq('id', batch_id).execute()
+        return jsonify({'status': 'completed', 'message': 'Old batch marked complete'})
 
     # Check if all workflows are complete
     completed_images = []
@@ -430,12 +437,19 @@ def poll_batch(batch_id):
 
             file_data = download_response.content
 
-            # Upload to Supabase Storage
+            # Upload to Supabase Storage (upsert=True to overwrite if exists)
             storage_path = f"pose_transfers/{batch_id}_pose{idx + 1}.png"
+
+            # Try to delete first if exists, then upload
+            try:
+                supabase.storage.from_('carousel-images').remove([storage_path])
+            except:
+                pass  # File doesn't exist, that's fine
+
             supabase.storage.from_('carousel-images').upload(
                 storage_path,
                 file_data,
-                file_options={"content-type": "image/png"}
+                file_options={"content-type": "image/png", "upsert": "true"}
             )
 
             # Get public URL
