@@ -337,120 +337,20 @@ def approve_edit(test_id):
 
         print(f"✅ All workflows triggered! Prompt IDs: {prompt_ids}")
 
-        # Update batch status
+        # Update batch with prompt IDs for later polling
         supabase.table('comfyui_batches').update({
-            'status': 'processing'
+            'status': 'processing',
+            'comfyui_prompt_ids': prompt_ids
         }).eq('id', batch_id).execute()
 
-        # 6. Poll for completion and download results
-        print(f"⏳ Waiting for all workflows to complete...")
-        max_attempts = 60  # 60 * 5 seconds = 5 minutes total
-        completed_images = []
+        # Return immediately - don't block the request
+        return jsonify({
+            'success': True,
+            'message': f'Edit approved! Workflows triggered for {len(other_images.data)} poses. Check /batches to monitor progress.',
+            'batch_id': batch_id,
+            'prompt_ids': prompt_ids
+        })
 
-        for idx, prompt_id in enumerate(prompt_ids):
-            print(f"\n📊 Polling pose {idx + 1}/{len(prompt_ids)} (Prompt ID: {prompt_id})")
-            attempt = 0
-            output_filename = None
-
-            while attempt < max_attempts:
-                time.sleep(5)
-                attempt += 1
-
-                try:
-                    # Check history via SSH
-                    history_cmd = f"curl -s http://127.0.0.1:8188/history/{prompt_id}"
-                    history_result = subprocess.run([
-                        'ssh', '-p', RUNPOD_SSH_PORT, '-i', SSH_KEY_PATH,
-                        f'root@{RUNPOD_SSH_HOST}', history_cmd
-                    ], capture_output=True, text=True, timeout=10)
-
-                    history_data = json.loads(history_result.stdout)
-
-                    # Check if completed
-                    if prompt_id in history_data and history_data[prompt_id].get('status', {}).get('completed'):
-                        # Get output filename
-                        outputs = history_data[prompt_id].get('outputs', {})
-                        for node_id, node_output in outputs.items():
-                            if 'images' in node_output:
-                                output_filename = node_output['images'][0]['filename']
-                                break
-                        break
-
-                    if attempt % 6 == 0:  # Log every 30 seconds
-                        print(f"  Attempt {attempt}/{max_attempts} for pose {idx + 1}...")
-
-                except Exception as poll_error:
-                    print(f"  ⚠️  Poll error: {poll_error}")
-                    continue
-
-            if not output_filename:
-                print(f"  ❌ Pose {idx + 1} timed out or failed")
-                continue
-
-            print(f"  ✅ Pose {idx + 1} complete!")
-
-            # Download result image from RunPod via HTTP API
-            try:
-                # Construct the actual saved filename (not the temp one from history)
-                actual_filename = f"{batch_id}_pose{idx + 1}_00001_.png"
-
-                # Download via HTTP /api/view endpoint
-                download_url = f"{COMFYUI_API_URL}/api/view?filename={actual_filename}&type=output&subfolder="
-                print(f"  📥 Downloading: {download_url}")
-
-                download_response = requests.get(download_url, timeout=60)
-                download_response.raise_for_status()
-
-                file_data = download_response.content
-
-                # Upload to Supabase Storage
-                storage_path = f"pose_transfers/{batch_id}_pose{idx + 1}.png"
-                supabase.storage.from_('carousel-images').upload(
-                    storage_path,
-                    file_data,
-                    file_options={"content-type": "image/png"}
-                )
-
-                # Get public URL
-                public_url = supabase.storage.from_('carousel-images').get_public_url(storage_path)
-                completed_images.append(public_url)
-
-                print(f"  ✅ Downloaded and uploaded to Supabase: {storage_path}")
-
-            except Exception as download_error:
-                print(f"  ❌ Download/upload error for pose {idx + 1}: {download_error}")
-                import traceback
-                traceback.print_exc()
-                continue
-
-        # 7. Update batch with completed results
-        if completed_images:
-            supabase.table('comfyui_batches').update({
-                'status': 'completed',
-                'completed_images': completed_images,
-                'completed_at': datetime.now().isoformat()
-            }).eq('id', batch_id).execute()
-
-            print(f"\n✅ Batch complete! {len(completed_images)}/{len(prompt_ids)} images generated")
-
-            return jsonify({
-                'success': True,
-                'message': f'Edit approved! Generated {len(completed_images)}/{len(prompt_ids)} pose transfers.',
-                'batch_id': batch_id,
-                'completed_images': completed_images
-            })
-        else:
-            supabase.table('comfyui_batches').update({
-                'status': 'failed',
-                'error_message': 'All workflows timed out or failed',
-                'completed_at': datetime.now().isoformat()
-            }).eq('id', batch_id).execute()
-
-            return jsonify({
-                'success': False,
-                'error': 'All workflows timed out or failed. Check RunPod ComfyUI.',
-                'batch_id': batch_id
-            }), 500
 
     except Exception as e:
         print(f"❌ Batch processing error: {e}")
@@ -483,6 +383,80 @@ def reject_edit(test_id):
     return jsonify({
         'success': True,
         'message': 'Edit rejected.'
+    })
+
+
+@app.route('/api/batches/<batch_id>/poll')
+def poll_batch(batch_id):
+    """Poll a batch for completion and download results"""
+
+    COMFYUI_API_URL = "https://9io0dgfk3xonew-8188.proxy.runpod.net"
+
+    # Get batch
+    result = supabase.table('comfyui_batches').select('*').eq('id', batch_id).single().execute()
+    batch = result.data
+
+    if not batch or batch['status'] != 'processing':
+        return jsonify(batch)
+
+    prompt_ids = batch.get('comfyui_prompt_ids', [])
+    if not prompt_ids:
+        return jsonify(batch)
+
+    # Check if all workflows are complete
+    completed_images = []
+
+    for idx, prompt_id in enumerate(prompt_ids):
+        try:
+            # Check history via HTTPS API
+            history_url = f"{COMFYUI_API_URL}/history/{prompt_id}"
+            response = requests.get(history_url, timeout=10)
+            response.raise_for_status()
+            history_data = response.json()
+
+            # Check if completed
+            if prompt_id not in history_data:
+                return jsonify({'status': 'processing', 'message': f'Waiting for pose {idx + 1}...'})
+
+            if not history_data[prompt_id].get('status', {}).get('completed'):
+                return jsonify({'status': 'processing', 'message': f'Pose {idx + 1} still generating...'})
+
+            # Download the result
+            actual_filename = f"{batch_id}_pose{idx + 1}_00001_.png"
+            download_url = f"{COMFYUI_API_URL}/api/view?filename={actual_filename}&type=output&subfolder="
+
+            download_response = requests.get(download_url, timeout=60)
+            download_response.raise_for_status()
+
+            file_data = download_response.content
+
+            # Upload to Supabase Storage
+            storage_path = f"pose_transfers/{batch_id}_pose{idx + 1}.png"
+            supabase.storage.from_('carousel-images').upload(
+                storage_path,
+                file_data,
+                file_options={"content-type": "image/png"}
+            )
+
+            # Get public URL
+            public_url = supabase.storage.from_('carousel-images').get_public_url(storage_path)
+            completed_images.append(public_url)
+
+        except Exception as e:
+            print(f"Error polling pose {idx + 1}: {e}")
+            return jsonify({'status': 'processing', 'message': f'Error checking pose {idx + 1}'})
+
+    # All complete! Update batch
+    supabase.table('comfyui_batches').update({
+        'status': 'completed',
+        'completed_images': completed_images,
+        'completed_at': datetime.now().isoformat()
+    }).eq('id', batch_id).execute()
+
+    return jsonify({
+        'status': 'completed',
+        'completed_images': completed_images,
+        'message': f'All {len(completed_images)} poses complete!'
     })
 
 

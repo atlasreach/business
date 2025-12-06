@@ -134,4 +134,41 @@
         </div>
     </div>
 {% endif %}
+
+<script>
+// Auto-poll processing batches every 10 seconds
+document.addEventListener('DOMContentLoaded', function() {
+    const processingBatches = [
+        {% for batch in batches %}
+        {% if batch.status == 'processing' %}
+        '{{ batch.id }}',
+        {% endif %}
+        {% endfor %}
+    ];
+
+    processingBatches.forEach(function(batchId) {
+        console.log('Polling batch:', batchId);
+
+        const interval = setInterval(function() {
+            fetch(`/api/batches/${batchId}/poll`)
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Poll result:', data);
+
+                    if (data.status === 'completed') {
+                        console.log('Batch complete! Reloading...');
+                        clearInterval(interval);
+                        location.reload();
+                    } else if (data.message) {
+                        console.log('Status:', data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Poll error:', error);
+                });
+        }, 10000);  // Poll every 10 seconds
+    });
+});
+</script>
+
 {% endblock %}
