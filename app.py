@@ -342,12 +342,115 @@ def approve_edit(test_id):
             'status': 'processing'
         }).eq('id', batch_id).execute()
 
-        return jsonify({
-            'success': True,
-            'message': f'Edit approved! Workflow 2 triggered for {len(other_images.data)} poses. Processing in background.',
-            'batch_id': batch_id,
-            'prompt_ids': prompt_ids
-        })
+        # 6. Poll for completion and download results
+        print(f"⏳ Waiting for all workflows to complete...")
+        max_attempts = 60  # 60 * 5 seconds = 5 minutes total
+        completed_images = []
+
+        for idx, prompt_id in enumerate(prompt_ids):
+            print(f"\n📊 Polling pose {idx + 1}/{len(prompt_ids)} (Prompt ID: {prompt_id})")
+            attempt = 0
+            output_filename = None
+
+            while attempt < max_attempts:
+                time.sleep(5)
+                attempt += 1
+
+                try:
+                    # Check history via SSH
+                    history_cmd = f"curl -s http://127.0.0.1:8188/history/{prompt_id}"
+                    history_result = subprocess.run([
+                        'ssh', '-p', RUNPOD_SSH_PORT, '-i', SSH_KEY_PATH,
+                        f'root@{RUNPOD_SSH_HOST}', history_cmd
+                    ], capture_output=True, text=True, timeout=10)
+
+                    history_data = json.loads(history_result.stdout)
+
+                    # Check if completed
+                    if prompt_id in history_data and history_data[prompt_id].get('status', {}).get('completed'):
+                        # Get output filename
+                        outputs = history_data[prompt_id].get('outputs', {})
+                        for node_id, node_output in outputs.items():
+                            if 'images' in node_output:
+                                output_filename = node_output['images'][0]['filename']
+                                break
+                        break
+
+                    if attempt % 6 == 0:  # Log every 30 seconds
+                        print(f"  Attempt {attempt}/{max_attempts} for pose {idx + 1}...")
+
+                except Exception as poll_error:
+                    print(f"  ⚠️  Poll error: {poll_error}")
+                    continue
+
+            if not output_filename:
+                print(f"  ❌ Pose {idx + 1} timed out or failed")
+                continue
+
+            print(f"  ✅ Pose {idx + 1} complete! Output: {output_filename}")
+
+            # Download result image from RunPod
+            try:
+                output_path = f"/workspace/ComfyUI/output/{output_filename}"
+                local_result_path = f"/tmp/result_{batch_id}_pose{idx + 1}.png"
+
+                subprocess.run([
+                    'scp', '-P', RUNPOD_SSH_PORT, '-i', SSH_KEY_PATH,
+                    f'root@{RUNPOD_SSH_HOST}:{output_path}', local_result_path
+                ], check=True, timeout=60)
+
+                # Upload to Supabase Storage
+                with open(local_result_path, 'rb') as f:
+                    file_data = f.read()
+
+                storage_path = f"pose_transfers/{batch_id}_pose{idx + 1}.png"
+                supabase.storage.from_('carousel-images').upload(
+                    storage_path,
+                    file_data,
+                    file_options={"content-type": "image/png"}
+                )
+
+                # Get public URL
+                public_url = supabase.storage.from_('carousel-images').get_public_url(storage_path)
+                completed_images.append(public_url)
+
+                # Clean up local file
+                os.unlink(local_result_path)
+
+                print(f"  ✅ Uploaded to Supabase: {storage_path}")
+
+            except Exception as download_error:
+                print(f"  ❌ Download/upload error for pose {idx + 1}: {download_error}")
+                continue
+
+        # 7. Update batch with completed results
+        if completed_images:
+            supabase.table('comfyui_batches').update({
+                'status': 'completed',
+                'completed_images': completed_images,
+                'completed_at': datetime.now().isoformat()
+            }).eq('id', batch_id).execute()
+
+            print(f"\n✅ Batch complete! {len(completed_images)}/{len(prompt_ids)} images generated")
+
+            return jsonify({
+                'success': True,
+                'message': f'Edit approved! Generated {len(completed_images)}/{len(prompt_ids)} pose transfers.',
+                'batch_id': batch_id,
+                'completed_images': completed_images
+            })
+        else:
+            supabase.table('comfyui_batches').update({
+                'status': 'failed',
+                'error_message': 'All workflows timed out or failed',
+                'completed_at': datetime.now().isoformat()
+            }).eq('id', batch_id).execute()
+
+            return jsonify({
+                'success': False,
+                'error': 'All workflows timed out or failed. Check RunPod ComfyUI.',
+                'batch_id': batch_id
+            }), 500
 
     except Exception as e:
         print(f"❌ Batch processing error: {e}")
