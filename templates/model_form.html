@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}Create Model - Instagram Editor{% endblock %}
+
+{% block content %}
+<h2 style="margin-bottom: 20px;">Create New Model</h2>
+
+<div class="card">
+    <div class="card-body">
+        <form id="modelForm" style="max-width: 600px;">
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; margin-bottom: 8px; font-weight: 600;">Model Name *</label>
+                <input type="text" name="name" required
+                       style="width: 100%; padding: 12px; border: 1px solid #dbdbdb; border-radius: 8px; font-size: 14px;"
+                       placeholder="e.g., Jane Doe, Brand X, etc.">
+            </div>
+
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; margin-bottom: 8px; font-weight: 600;">Description</label>
+                <textarea name="description" rows="4"
+                          style="width: 100%; padding: 12px; border: 1px solid #dbdbdb; border-radius: 8px; font-size: 14px; resize: vertical;"
+                          placeholder="Optional description of this model..."></textarea>
+            </div>
+
+            <button type="submit" class="btn btn-primary"
+                    style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 12px 32px; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 16px;">
+                Create Model
+            </button>
+            <a href="/" style="margin-left: 12px; padding: 12px 32px; text-decoration: none; color: #8e8e8e;">Cancel</a>
+        </form>
+    </div>
+</div>
+
+<script>
+document.getElementById('modelForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+
+    const formData = new FormData(this);
+
+    fetch('/api/models', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            window.location.href = data.redirect;
+        } else {
+            alert('Error: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Failed to create model');
+    });
+});
+</script>
+{% endblock %}

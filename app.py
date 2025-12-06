@@ -33,7 +33,17 @@ WAVESPEED_API_URL = os.getenv('WAVESPEED_API_URL')
 
 @app.route('/')
 def index():
-    """Homepage - Show all carousels"""
+    """Homepage - Show all models"""
+
+    result = supabase.table('models').select('*').order('created_at', desc=True).execute()
+    models = result.data
+
+    return render_template('index.html', models=models)
+
+
+@app.route('/browse')
+def browse_carousels():
+    """Browse all Instagram carousels"""
 
     # Get all carousels, ordered by most recent
     result = supabase.table('instagram_carousels').select('*').order('posted_at', desc=True).execute()
@@ -44,7 +54,117 @@ def index():
         images = supabase.table('carousel_images').select('*').eq('carousel_id', carousel['id']).order('image_order').limit(1).execute()
         carousel['first_image'] = images.data[0] if images.data else None
 
-    return render_template('index.html', carousels=carousels)
+    return render_template('browse.html', carousels=carousels)
+
+
+@app.route('/models/new')
+def new_model():
+    """Create new model form"""
+    return render_template('model_form.html')
+
+
+@app.route('/api/models', methods=['POST'])
+def create_model():
+    """API endpoint - Create new model"""
+
+    name = request.form.get('name')
+    description = request.form.get('description', '')
+
+    if not name:
+        return jsonify({'success': False, 'error': 'Name is required'}), 400
+
+    # Create model
+    model_data = {
+        'name': name,
+        'description': description,
+        'reference_image_urls': []  # TODO: Handle image uploads later
+    }
+
+    result = supabase.table('models').insert(model_data).execute()
+    model_id = result.data[0]['id']
+
+    return jsonify({'success': True, 'model_id': model_id, 'redirect': f'/models/{model_id}/gallery'})
+
+
+@app.route('/models/<model_id>/gallery')
+def model_gallery(model_id):
+    """Gallery page for a model - shows ALL images with filters"""
+
+    # Get model
+    model_result = supabase.table('models').select('*').eq('id', model_id).single().execute()
+    model = model_result.data
+
+    # Get ALL images from ALL carousels
+    images_result = supabase.table('carousel_images').select('*, instagram_carousels!inner(username, post_id)').execute()
+    all_images = images_result.data
+
+    # Get unique Instagram usernames for filter
+    usernames = list(set([img['instagram_carousels']['username'] for img in all_images]))
+    usernames.sort()
+
+    return render_template('model_gallery.html', model=model, images=all_images, usernames=usernames)
+
+
+@app.route('/api/models/<model_id>/generate', methods=['POST'])
+def generate_from_model(model_id):
+    """API endpoint - Generate images from selected images
+
+    Expects:
+    - primary_image_id: Image to edit with NanaBanana
+    - reference_image_ids[]: Images to use as pose references
+    - prompt: Edit prompt for NanaBanana
+    """
+
+    data = request.json
+    primary_image_id = data.get('primary_image_id')
+    reference_image_ids = data.get('reference_image_ids', [])
+    prompt = data.get('prompt', '')
+
+    if not primary_image_id or not reference_image_ids or not prompt:
+        return jsonify({'success': False, 'error': 'Missing required fields'}), 400
+
+    # Get primary image
+    primary_img = supabase.table('carousel_images').select('*').eq('id', primary_image_id).single().execute().data
+
+    # Call NanaBanana API to edit primary image
+    print(f"Calling NanaBanana API with prompt: {prompt}")
+
+    response = requests.post(
+        f"{WAVESPEED_API_URL}/nanabana",
+        headers={'Content-Type': 'application/json'},
+        json={
+            'image_url': primary_img.get('local_path') or primary_img['image_url'],
+            'prompt': prompt,
+            'api_key': WAVESPEED_API_KEY
+        },
+        timeout=120
+    )
+
+    if response.status_code != 200:
+        return jsonify({'success': False, 'error': f'NanaBanana API error: {response.text}'}), 500
+
+    result_url = response.json().get('result_url')
+
+    # Create edit_test record linked to model
+    edit_test = {
+        'carousel_id': primary_img['carousel_id'],
+        'image_id': primary_image_id,
+        'edit_prompt': prompt,
+        'nanabana_result_url': result_url,
+        'status': 'completed',
+        'completed_at': datetime.now().isoformat(),
+        'model_id': model_id  # Link to model!
+    }
+
+    test_result = supabase.table('edit_tests').insert(edit_test).execute()
+    test_id = test_result.data[0]['id']
+
+    return jsonify({
+        'success': True,
+        'test_id': test_id,
+        'result_url': result_url,
+        'redirect': f'/review/{test_id}'
+    })
 
 
 @app.route('/carousel/<carousel_id>')

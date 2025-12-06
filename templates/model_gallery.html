@@ -1,0 +1,421 @@
+{% extends "base.html" %}
+
+{% block title %}{{ model.name }} - Gallery{% endblock %}
+
+{% block extra_css %}
+<style>
+    .gallery-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+    }
+
+    .filter-section {
+        margin-bottom: 20px;
+        display: flex;
+        gap: 15px;
+        align-items: center;
+    }
+
+    .filter-section select {
+        padding: 10px 15px;
+        border: 1px solid #dbdbdb;
+        border-radius: 8px;
+        font-size: 14px;
+        background: white;
+        cursor: pointer;
+    }
+
+    .selection-info {
+        padding: 15px;
+        background: #f8f9ff;
+        border: 1px solid #667eea;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        display: none;
+    }
+
+    .selection-info.active {
+        display: block;
+    }
+
+    .selection-counts {
+        display: flex;
+        gap: 20px;
+        font-size: 14px;
+        font-weight: 600;
+    }
+
+    .count-primary { color: #0095f6; }
+    .count-poses { color: #22c55e; }
+
+    .images-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+        gap: 15px;
+        margin-bottom: 30px;
+    }
+
+    .image-item {
+        position: relative;
+        cursor: pointer;
+        border: 3px solid transparent;
+        border-radius: 8px;
+        overflow: hidden;
+        transition: all 0.2s;
+    }
+
+    .image-item:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+
+    .image-item.selected-primary {
+        border-color: #0095f6;
+        box-shadow: 0 0 0 2px rgba(0, 149, 246, 0.2);
+    }
+
+    .image-item.selected-pose {
+        border-color: #22c55e;
+        box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.2);
+    }
+
+    .image-item img {
+        width: 100%;
+        height: 250px;
+        object-fit: cover;
+        display: block;
+    }
+
+    .image-badge {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 11px;
+        font-weight: 600;
+        background: rgba(0, 0, 0, 0.7);
+        color: white;
+        display: none;
+    }
+
+    .image-item.selected-primary .image-badge {
+        display: block;
+        background: #0095f6;
+    }
+
+    .image-item.selected-pose .image-badge {
+        display: block;
+        background: #22c55e;
+    }
+
+    .image-meta {
+        padding: 10px;
+        background: white;
+        font-size: 12px;
+        color: #8e8e8e;
+    }
+
+    .image-username {
+        font-weight: 600;
+        color: #262626;
+    }
+
+    .prompt-section {
+        position: sticky;
+        bottom: 0;
+        background: white;
+        padding: 20px;
+        border-top: 1px solid #dbdbdb;
+        box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
+        display: none;
+    }
+
+    .prompt-section.active {
+        display: block;
+    }
+
+    .prompt-section textarea {
+        width: 100%;
+        padding: 12px;
+        border: 1px solid #dbdbdb;
+        border-radius: 8px;
+        font-size: 14px;
+        resize: vertical;
+        margin-bottom: 15px;
+        font-family: inherit;
+    }
+
+    .action-buttons {
+        display: flex;
+        gap: 10px;
+        justify-content: flex-end;
+    }
+
+    .btn {
+        padding: 12px 24px;
+        border: none;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer;
+        font-size: 14px;
+        transition: all 0.2s;
+    }
+
+    .btn-primary {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+
+    .btn-primary:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .btn-secondary {
+        background: #f0f0f0;
+        color: #262626;
+    }
+
+    .btn-secondary:hover {
+        background: #e0e0e0;
+    }
+
+    .instructions {
+        background: #fff9e6;
+        border: 1px solid #ffc107;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 20px;
+        font-size: 14px;
+    }
+
+    .instructions strong {
+        color: #f57c00;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="gallery-header">
+    <div>
+        <h2 style="margin: 0;">{{ model.name }}</h2>
+        {% if model.description %}
+        <p style="color: #8e8e8e; margin: 5px 0 0 0;">{{ model.description }}</p>
+        {% endif %}
+    </div>
+    <a href="/" class="btn btn-secondary">← Back to Models</a>
+</div>
+
+<div class="instructions">
+    <strong>Instructions:</strong> Click an image to select it as the <span style="color: #0095f6;">primary edit image</span> (blue border).
+    Hold <strong>Shift</strong> and click additional images to select them as <span style="color: #22c55e;">pose references</span> (green borders).
+</div>
+
+<div class="filter-section">
+    <label style="font-weight: 600;">Filter by Instagram account:</label>
+    <select id="usernameFilter">
+        <option value="">All Accounts ({{ images|length }} images)</option>
+        {% for username in usernames %}
+        <option value="{{ username }}">@{{ username }}</option>
+        {% endfor %}
+    </select>
+</div>
+
+<div class="selection-info" id="selectionInfo">
+    <div class="selection-counts">
+        <span class="count-primary">Primary: <span id="primaryCount">0</span></span>
+        <span class="count-poses">Pose References: <span id="poseCount">0</span></span>
+    </div>
+</div>
+
+<div class="images-grid" id="imagesGrid">
+    {% for image in images %}
+    <div class="image-item"
+         data-image-id="{{ image.id }}"
+         data-username="{{ image.instagram_carousels.username }}"
+         onclick="handleImageClick(event, this)">
+        <img src="{{ image.local_path or image.image_url }}" alt="Image">
+        <div class="image-badge"></div>
+        <div class="image-meta">
+            <div class="image-username">@{{ image.instagram_carousels.username }}</div>
+            <div>Post: {{ image.instagram_carousels.post_id[:15] }}...</div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+{% if not images %}
+<div class="card">
+    <div class="card-body" style="text-align: center; padding: 60px;">
+        <h3>No images available</h3>
+        <p style="margin-top: 10px; color: #8e8e8e;">Import Instagram data to get started.</p>
+    </div>
+</div>
+{% endif %}
+
+<div class="prompt-section" id="promptSection">
+    <form id="generateForm">
+        <label style="display: block; margin-bottom: 8px; font-weight: 600;">Edit Prompt</label>
+        <textarea id="promptInput"
+                  name="prompt"
+                  rows="3"
+                  placeholder="Describe the edit you want to apply to the primary image..."
+                  required></textarea>
+
+        <div class="action-buttons">
+            <button type="button" class="btn btn-secondary" onclick="clearSelection()">Clear Selection</button>
+            <button type="submit" class="btn btn-primary" id="generateBtn" disabled>
+                Generate with NanaBanana
+            </button>
+        </div>
+    </form>
+</div>
+
+<script>
+let primaryImageId = null;
+let poseImageIds = [];
+
+function handleImageClick(event, element) {
+    const imageId = element.dataset.imageId;
+    const isShiftHeld = event.shiftKey;
+
+    if (!isShiftHeld) {
+        // Regular click = set as primary
+        // Clear previous primary
+        document.querySelectorAll('.image-item').forEach(item => {
+            item.classList.remove('selected-primary');
+            const badge = item.querySelector('.image-badge');
+            badge.textContent = '';
+        });
+
+        // Set new primary
+        primaryImageId = imageId;
+        element.classList.add('selected-primary');
+        element.querySelector('.image-badge').textContent = 'PRIMARY';
+
+        // Remove from poses if it was there
+        const poseIndex = poseImageIds.indexOf(imageId);
+        if (poseIndex > -1) {
+            poseImageIds.splice(poseIndex, 1);
+        }
+    } else {
+        // Shift+click = toggle pose reference
+        if (element.classList.contains('selected-pose')) {
+            // Remove from poses
+            element.classList.remove('selected-pose');
+            element.querySelector('.image-badge').textContent = '';
+            const index = poseImageIds.indexOf(imageId);
+            if (index > -1) {
+                poseImageIds.splice(index, 1);
+            }
+        } else {
+            // Add to poses (if not primary)
+            if (imageId !== primaryImageId) {
+                element.classList.add('selected-pose');
+                element.querySelector('.image-badge').textContent = 'POSE REF';
+                poseImageIds.push(imageId);
+            }
+        }
+    }
+
+    updateUI();
+}
+
+function updateUI() {
+    const primaryCount = primaryImageId ? 1 : 0;
+    const poseCount = poseImageIds.length;
+
+    document.getElementById('primaryCount').textContent = primaryCount;
+    document.getElementById('poseCount').textContent = poseCount;
+
+    const selectionInfo = document.getElementById('selectionInfo');
+    const promptSection = document.getElementById('promptSection');
+    const generateBtn = document.getElementById('generateBtn');
+
+    if (primaryCount > 0 && poseCount > 0) {
+        selectionInfo.classList.add('active');
+        promptSection.classList.add('active');
+        generateBtn.disabled = false;
+    } else {
+        selectionInfo.classList.add('active');
+        promptSection.classList.remove('active');
+        generateBtn.disabled = true;
+    }
+}
+
+function clearSelection() {
+    primaryImageId = null;
+    poseImageIds = [];
+
+    document.querySelectorAll('.image-item').forEach(item => {
+        item.classList.remove('selected-primary', 'selected-pose');
+        item.querySelector('.image-badge').textContent = '';
+    });
+
+    document.getElementById('promptInput').value = '';
+    updateUI();
+}
+
+// Username filter
+document.getElementById('usernameFilter').addEventListener('change', function(e) {
+    const selectedUsername = e.target.value;
+    const imageItems = document.querySelectorAll('.image-item');
+
+    imageItems.forEach(item => {
+        const username = item.dataset.username;
+        if (!selectedUsername || username === selectedUsername) {
+            item.style.display = 'block';
+        } else {
+            item.style.display = 'none';
+        }
+    });
+});
+
+// Form submission
+document.getElementById('generateForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+
+    const prompt = document.getElementById('promptInput').value;
+    const generateBtn = document.getElementById('generateBtn');
+
+    generateBtn.disabled = true;
+    generateBtn.textContent = 'Generating...';
+
+    fetch('/api/models/{{ model.id }}/generate', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            primary_image_id: primaryImageId,
+            reference_image_ids: poseImageIds,
+            prompt: prompt
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            window.location.href = `/edit/${data.test_id}`;
+        } else {
+            alert('Error: ' + data.error);
+            generateBtn.disabled = false;
+            generateBtn.textContent = 'Generate with NanaBanana';
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Failed to generate. Please try again.');
+        generateBtn.disabled = false;
+        generateBtn.textContent = 'Generate with NanaBanana';
+    });
+});
+</script>
+{% endblock %}
