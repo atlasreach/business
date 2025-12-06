@@ -243,7 +243,7 @@ def approve_edit(test_id):
         'carousel_id': test['carousel_id'],
         'status': 'processing',
         'images_to_process': [{'id': img['id'], 'url': img.get('local_path') or img['image_url'], 'order': img['image_order']} for img in other_images.data],
-        'workflow_name': 'OpenPose Workflow 4'
+        'workflow_name': 'OpenPose Workflow 2 (Batch)'
     }
 
     batch_result = supabase.table('comfyui_batches').insert(batch_data).execute()
@@ -302,26 +302,24 @@ def approve_edit(test_id):
 
         print(f"✅ All pose images uploaded to {pose_folder}")
 
-        # 4. Load Workflow 4 template
-        workflow_path = '/workspaces/business/OpenPose Workflow 4 - Group of poses - Jockerai (1) (3).json'
+        # 4. Load Workflow 2 template (has OpenPose preprocessing)
+        workflow_path = '/workspaces/business/OpenPose Workflow 2 - Jockerai (2).json'
         with open(workflow_path, 'r') as f:
             workflow_template = json.load(f)
 
-        # 5. Trigger Workflow 4 for each pose
-        print(f"🚀 Triggering Workflow 4 for {len(other_images.data)} poses...")
+        # 5. Trigger Workflow 2 for each pose image (hybrid approach)
+        print(f"🚀 Triggering Workflow 2 for {len(other_images.data)} poses...")
 
         import random
         prompt_ids = []
 
-        for pose_index in range(len(other_images.data)):
+        for pose_index, pose_img in enumerate(other_images.data):
             workflow = json.loads(json.dumps(workflow_template))  # Deep copy
 
-            # Configure workflow
+            # Configure workflow for this specific pose
             workflow["67"]["inputs"]["unet_name"] = "qwen_image_edit_2509_fp8_e4m3fn.safetensors"
-            workflow["199"]["inputs"]["value"] = f"/workspace/ComfyUI/input/{pose_folder}"
-            workflow["200"]["inputs"]["image"] = model_filename
-            workflow["198"]["inputs"]["start_index"] = pose_index
-            workflow["198"]["inputs"]["image_load_cap"] = 1
+            workflow["78"]["inputs"]["image"] = model_filename  # Model image (NanaBanana edit)
+            workflow["179"]["inputs"]["image"] = f"{pose_folder}/pose{pose_index + 1}.jpg"  # This specific pose
             workflow["74"]["inputs"]["seed"] = random.randint(1000000000000, 9999999999999)
             workflow["94"]["inputs"]["filename_prefix"] = f"{batch_id}_pose{pose_index + 1}"
 
@@ -339,15 +337,14 @@ def approve_edit(test_id):
 
         print(f"✅ All workflows triggered! Prompt IDs: {prompt_ids}")
 
-        # Update batch with prompt IDs
+        # Update batch status
         supabase.table('comfyui_batches').update({
-            'status': 'processing',
-            'comfyui_prompt_ids': prompt_ids
+            'status': 'processing'
         }).eq('id', batch_id).execute()
 
         return jsonify({
             'success': True,
-            'message': f'Edit approved! Workflow 4 triggered for {len(other_images.data)} poses. Processing in background.',
+            'message': f'Edit approved! Workflow 2 triggered for {len(other_images.data)} poses. Processing in background.',
             'batch_id': batch_id,
             'prompt_ids': prompt_ids
         })
