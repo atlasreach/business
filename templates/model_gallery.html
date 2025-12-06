@@ -215,8 +215,7 @@
 </div>
 
 <div class="instructions">
-    <strong>Instructions:</strong> Click an image to select it as the <span style="color: #0095f6;">primary edit image</span> (blue border).
-    Hold <strong>Shift</strong> and click additional images to select them as <span style="color: #22c55e;">pose references</span> (green borders).
+    <strong>Instructions:</strong> Click an image to select it for editing with NanaBanana. After the edit is complete, you'll be able to select pose reference images for ComfyUI batch processing.
 </div>
 
 <div class="filter-section">
@@ -231,8 +230,7 @@
 
 <div class="selection-info" id="selectionInfo">
     <div class="selection-counts">
-        <span class="count-primary">Primary: <span id="primaryCount">0</span></span>
-        <span class="count-poses">Pose References: <span id="poseCount">0</span></span>
+        <span class="count-primary">Selected: <span id="primaryCount">0</span> image</span>
     </div>
 </div>
 
@@ -280,83 +278,51 @@
 </div>
 
 <script>
-let primaryImageId = null;
-let poseImageIds = [];
+let selectedImageId = null;
 
 function handleImageClick(event, element) {
     const imageId = element.dataset.imageId;
-    const isShiftHeld = event.shiftKey;
 
-    if (!isShiftHeld) {
-        // Regular click = set as primary
-        // Clear previous primary
-        document.querySelectorAll('.image-item').forEach(item => {
-            item.classList.remove('selected-primary');
-            const badge = item.querySelector('.image-badge');
-            badge.textContent = '';
-        });
+    // Clear previous selection
+    document.querySelectorAll('.image-item').forEach(item => {
+        item.classList.remove('selected-primary');
+        const badge = item.querySelector('.image-badge');
+        badge.textContent = '';
+    });
 
-        // Set new primary
-        primaryImageId = imageId;
-        element.classList.add('selected-primary');
-        element.querySelector('.image-badge').textContent = 'PRIMARY';
-
-        // Remove from poses if it was there
-        const poseIndex = poseImageIds.indexOf(imageId);
-        if (poseIndex > -1) {
-            poseImageIds.splice(poseIndex, 1);
-        }
-    } else {
-        // Shift+click = toggle pose reference
-        if (element.classList.contains('selected-pose')) {
-            // Remove from poses
-            element.classList.remove('selected-pose');
-            element.querySelector('.image-badge').textContent = '';
-            const index = poseImageIds.indexOf(imageId);
-            if (index > -1) {
-                poseImageIds.splice(index, 1);
-            }
-        } else {
-            // Add to poses (if not primary)
-            if (imageId !== primaryImageId) {
-                element.classList.add('selected-pose');
-                element.querySelector('.image-badge').textContent = 'POSE REF';
-                poseImageIds.push(imageId);
-            }
-        }
-    }
+    // Set new selection
+    selectedImageId = imageId;
+    element.classList.add('selected-primary');
+    element.querySelector('.image-badge').textContent = 'SELECTED';
 
     updateUI();
 }
 
 function updateUI() {
-    const primaryCount = primaryImageId ? 1 : 0;
-    const poseCount = poseImageIds.length;
+    const selectedCount = selectedImageId ? 1 : 0;
 
-    document.getElementById('primaryCount').textContent = primaryCount;
-    document.getElementById('poseCount').textContent = poseCount;
+    document.getElementById('primaryCount').textContent = selectedCount;
 
     const selectionInfo = document.getElementById('selectionInfo');
     const promptSection = document.getElementById('promptSection');
     const generateBtn = document.getElementById('generateBtn');
 
-    if (primaryCount > 0 && poseCount > 0) {
+    if (selectedCount > 0) {
         selectionInfo.classList.add('active');
         promptSection.classList.add('active');
         generateBtn.disabled = false;
     } else {
-        selectionInfo.classList.add('active');
+        selectionInfo.classList.remove('active');
         promptSection.classList.remove('active');
         generateBtn.disabled = true;
     }
 }
 
 function clearSelection() {
-    primaryImageId = null;
-    poseImageIds = [];
+    selectedImageId = null;
 
     document.querySelectorAll('.image-item').forEach(item => {
-        item.classList.remove('selected-primary', 'selected-pose');
+        item.classList.remove('selected-primary');
         item.querySelector('.image-badge').textContent = '';
     });
 
@@ -395,15 +361,14 @@ document.getElementById('generateForm').addEventListener('submit', function(e) {
             'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-            primary_image_id: primaryImageId,
-            reference_image_ids: poseImageIds,
+            image_id: selectedImageId,
             prompt: prompt
         })
     })
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            window.location.href = `/edit/${data.test_id}`;
+            window.location.href = data.redirect;
         } else {
             alert('Error: ' + data.error);
             generateBtn.disabled = false;

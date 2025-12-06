@@ -107,48 +107,64 @@ def model_gallery(model_id):
 
 @app.route('/api/models/<model_id>/generate', methods=['POST'])
 def generate_from_model(model_id):
-    """API endpoint - Generate images from selected images
+    """API endpoint - Generate NanaBanana edit from single selected image
 
     Expects:
-    - primary_image_id: Image to edit with NanaBanana
-    - reference_image_ids[]: Images to use as pose references
+    - image_id: Image to edit with NanaBanana
     - prompt: Edit prompt for NanaBanana
     """
 
     data = request.json
-    primary_image_id = data.get('primary_image_id')
-    reference_image_ids = data.get('reference_image_ids', [])
+    image_id = data.get('image_id')
     prompt = data.get('prompt', '')
 
-    if not primary_image_id or not reference_image_ids or not prompt:
+    if not image_id or not prompt:
         return jsonify({'success': False, 'error': 'Missing required fields'}), 400
 
-    # Get primary image
-    primary_img = supabase.table('carousel_images').select('*').eq('id', primary_image_id).single().execute().data
+    # Get image
+    image = supabase.table('carousel_images').select('*').eq('id', image_id).single().execute().data
 
     # Call NanaBanana API to edit primary image
     print(f"Calling NanaBanana API with prompt: {prompt}")
 
-    response = requests.post(
-        f"{WAVESPEED_API_URL}/nanabana",
-        headers={'Content-Type': 'application/json'},
-        json={
-            'image_url': primary_img.get('local_path') or primary_img['image_url'],
-            'prompt': prompt,
-            'api_key': WAVESPEED_API_KEY
-        },
-        timeout=120
-    )
+    image_url = image.get('local_path') or image['image_url']
 
-    if response.status_code != 200:
-        return jsonify({'success': False, 'error': f'NanaBanana API error: {response.text}'}), 500
+    payload = {
+        "prompt": prompt,
+        "images": [image_url],
+        "aspect_ratio": "1:1",
+        "resolution": "1k",
+        "output_format": "jpeg",
+        "enable_sync_mode": True,
+        "enable_base64_output": False
+    }
 
-    result_url = response.json().get('result_url')
+    headers = {
+        "Authorization": f"Bearer {WAVESPEED_API_KEY}",
+        "Content-Type": "application/json"
+    }
+
+    try:
+        response = requests.post(WAVESPEED_API_URL, json=payload, headers=headers, timeout=120)
+        response.raise_for_status()
+
+        result = response.json()
+
+        if result.get('code') != 200:
+            return jsonify({'success': False, 'error': f'NanaBanana API error: {result.get("message", "Unknown error")}'}), 500
+
+        data = result.get('data', {})
+        if not data.get('outputs') or len(data['outputs']) == 0:
+            return jsonify({'success': False, 'error': 'No image outputs in response'}), 500
+
+        result_url = data['outputs'][0]
+    except Exception as e:
+        return jsonify({'success': False, 'error': f'NanaBanana API error: {str(e)}'}), 500
 
     # Create edit_test record linked to model
     edit_test = {
-        'carousel_id': primary_img['carousel_id'],
-        'image_id': primary_image_id,
+        'carousel_id': image['carousel_id'],
+        'image_id': image_id,
         'edit_prompt': prompt,
         'nanabana_result_url': result_url,
         'status': 'completed',
